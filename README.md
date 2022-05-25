@@ -2,6 +2,10 @@
 
 ## Contrastive Learning of Renal Transplant MRIs
 
+<p align="center">
+  <img src="figures/overview.png" width="700">
+</p>
+
 ### Usage
 
 Pretrain your ResNet Model locally
@@ -20,7 +24,7 @@ python get_features.py
 ```
 
 ### Dummy dataset
-As the dataset for this work is not publicly available, I built a dummy mri dataset path tree similar to our dataset so that the code can be ran on it, when argument ```dummy=True``` in 
+As the dataset for this work is not publicly available, I built a dummy mri dataset path tree similar to our dataset so that the code can be ran on it, when argument ```dummy=True``` in ```get_patient_seq_paths``` function
 ```bash
 ├── data
 │   ├── dummy_dataframes
@@ -28,7 +32,7 @@ As the dataset for this work is not publicly available, I built a dummy mri data
 │   ├── dummy_mri_dataset (contains patients)
 │   │   ├── dummy_mri.nii.gz
 │   │   ├── 001-0001-A-A (contains exams)
-│   │   │   ├── D15 (contains series)
+│   │   │   ├── D15 (contains MRI sequences)
 │   │   │   │   ├── 1_WATER_AX_LAVA-Flex_ss_IV
 │   │   │   │   ├── 2_WATER_AX_LAVA-Flex_ART
 │   │   │   │   ├── 3_WATER_AX_LAVA-Flex_tub
@@ -49,7 +53,7 @@ conda env create -n ENVNAME --file conda_environment.yml
 
 ### Visualization of features
 <p align="center">
-  <img src="figures/teaser.png" width="700">
+  <img src="figures/visualization.png" width="700">
 </p>
 
 ### Reference
