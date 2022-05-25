@@ -10,7 +10,7 @@ import nibabel as nib
 
 import sys
 sys.path.insert(0, '../')
-from  misc.data_import import get_patient_seq_paths
+from  utils.data_import import get_patient_seq_paths
 
 parser = argparse.ArgumentParser(description='MRI preprocessing')
 parser.add_argument('--exam', metavar='EXAM', default='M12', type=str,
@@ -19,7 +19,7 @@ parser.add_argument("--img_size", default=[192, 144, 96], nargs='+', type=int,
                         help="Resolution size")
 args = parser.parse_args()
 
-path_to_data = '/kidney_seg/data/data_kidney_mri'
+path_to_data = '../data/dummy_mri_dataset'
 key_words_seqs = [['TUB', 'tub', 'WATER', 'AX', 'LAVA', ], ['WATER', 'AX', 'LAVA']]
 mins_key_words = [4, 3]
 path_keys = [key_words_seqs[0][0], key_words_seqs[1][0]]
@@ -46,10 +46,10 @@ for it_patient, select_patient in enumerate(select_patients):
 				x = abs(int((img.affine[0,3] - ref_img.affine[0,3]) / ref_img.affine[0,0]))
 				y = abs(int((img.affine[1,3] - ref_img.affine[1,3]) / ref_img.affine[1,1]))
 				z = abs(int((img.affine[2,3] - ref_img.affine[2,3]) / ref_img.affine[2,2]))
-				cimg = img.slicer[max(0, x-lx):x+vit_size[0]-lx, max(0, y-ly):y+vit_size[1]-ly, max(0, z-lz):z+vit_size[2]-lz]
-				nib.save(cimg, os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized_vit.nii.gz'))
+				cimg = img.slicer[max(0, x-lx):x+args.img_size[0]-lx, max(0, y-ly):y+args.img_size[1]-ly, max(0, z-lz):z+args.img_size[2]-lz]
+				nib.save(cimg, os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized.nii.gz'))
 				
-				cimg = sitk.ReadImage(os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized_vit.nii.gz'))	
+				cimg = sitk.ReadImage(os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized.nii.gz'))	
 				statsFilter = sitk.StatisticsImageFilter()
 				statsFilter.Execute(cimg)
 				print(' '*8+'Original image:')
@@ -89,18 +89,16 @@ for it_patient, select_patient in enumerate(select_patients):
 				print(' '*8+'After rescale to [0,1]:')
 				print(' '*8+'Mean: {}, Std: {}'.format(statsFilter.GetMean(), statsFilter.GetSigma()))
 				print(' '*8+'Min: {}, Max: {}'.format(statsFilter.GetMinimum(), statsFilter.GetMaximum()))
-				sitk.WriteImage(ncimg, os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized_vit.nii.gz'))
-			
+				sitk.WriteImage(ncimg, os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized.nii.gz'))	
 		
 				# CropOrPad with tio
-				ncimg = tio.ScalarImage(os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized_vit.nii.gz'))
+				ncimg = tio.ScalarImage(os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized.nii.gz'))
 				tf = tio.CropOrPad(args.img_size)
 				rncimg = tf(ncimg)
-				rncimg.save(os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized_vit.nii.gz'))
-				
+				rncimg.save(os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized.nii.gz'))
 
 				# Save to float 32
-				rncimg = sitk.ReadImage(os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized_vit.nii.gz'), sitk.sitkFloat32)
-				sitk.WriteImage(rncimg, os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized_vit.nii.gz'))
+				rncimg = sitk.ReadImage(os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized.nii.gz'), sitk.sitkFloat32)
+				sitk.WriteImage(rncimg, os.path.join(path_to_volumes[key], 'preprocessed/mri_cropped_normalized_resized.nii.gz'))
 
 

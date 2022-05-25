@@ -7,81 +7,26 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import pandas as pd
+from collections import OrderedDict
+import wandb
+
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
 import torch.distributed as dist
 
-from tqdm import tqdm
-
+import sys
+sys.path.insert(0, '../')
 from models.resnet import resnet10, resnet18, resnet34, resnet50
+from dataloader import get_loader_kidney_patient_disc, get_loader_kidney_pairs
 from utils.scheduler import WarmupLinearSchedule, WarmupCosineSchedule
-from dataloader import get_loader_kidney_patient_disc, get_loader_kidney_mdrd_disc, get_loader_kidney_age_donor_disc, get_loader_kidney_fibrose_disc, get_loader_kidney_incomp_disc, get_loader_kidney_citime_disc
-
-
-from torch.nn.modules.utils import _pair, _triple
-
-import subprocess
-from io import BytesIO
-import pandas as pd
-from sklearn.metrics import accuracy_score, f1_score, recall_score, precision_score, roc_auc_score, average_precision_score
-#from torchsummary import summary
-import wandb
-from skimage.transform import resize
-import io
-from collections import OrderedDict
+from utils.metrics import AverageMeter, f1, recall, precision, roc_auc
+from utils.checkpoints import save_ckp, load_ckp
+from utils.misc import count_parameters, set_seed
 
 logger = logging.getLogger(__name__)
-
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-def f1(y_true, y_pred):
-    return f1_score(y_true, y_pred, zero_division=0)
-
-def recall(y_true, y_pred):
-    return recall_score(y_true, y_pred, zero_division=0)
-
-def precision(y_true, y_pred):
-    return precision_score(y_true, y_pred, zero_division=0)
-
-def roc_auc(y_true, y_pred):
-        try:
-                return roc_auc_score(y_true, y_pred)
-        except ValueError:
-                return 0
-
-def save_ckp(args, ckp, is_best=False):
-    # Save model checkpoint
-    model_checkpoint = os.path.join(args.output_dir, args.wandb_id, "%s_checkpoint.bin" % args.name)
-    logger.info("Saved model checkpoint to [DIR: %s]", args.output_dir)
-    torch.save(ckp, model_checkpoint)
-    if is_best:
-        model_checkpoint = os.path.join(args.output_dir, args.wandb_id, "%s_best.bin" % args.name)
-        torch.save(ckp, model_checkpoint)
-        logger.info("Saved best model checkpoint to [DIR: %s]", args.output_dir)
-
-def load_ckp(args, model, optimizer, scheduler):
-    # Load model checkpoint
-    checkpoint = torch.load(os.path.join(args.output_dir, args.wandb_id, "%s_checkpoint.bin" % args.name))
-    model.load_state_dict(checkpoint['state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
-    scheduler.load_state_dict(checkpoint['scheduler'])
-    return model, optimizer, scheduler, checkpoint['wandb_step'], checkpoint['global_step'], checkpoint['epoch_step'], checkpoint['best_loss'], checkpoint['curriculum_it']
 
 def setup(args):
     # Prepare model
@@ -97,7 +42,7 @@ def setup(args):
             model.fc = nn.Sequential(nn.Linear(dim_in, args.feat_dim), nn.Dropout(args.dropout))
         elif args.features_head == 'mlp':
             model.fc = nn.Sequential(nn.Linear(dim_in, dim_in), nn.Dropout(args.dropout), nn.ReLU(inplace=True), nn.Linear(dim_in, args.feat_dim), nn.Dropout(args.dropout))
-   if torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model) 
     model.to(args.device)
     num_params = count_parameters(model)    
@@ -105,18 +50,7 @@ def setup(args):
     logger.info("Training parameters %s", args)
     logger.info("Total Parameter: \t%2.1fM" % num_params)
     return args, model
-
-def count_parameters(model):
-    params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    return params/1000000
-
-def set_seed(args):
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)      
-       
+ 
 def valid(args, model, eval_loader, wandb_step, global_step, epoch_step):
     # Validation!
     eval_losses = AverageMeter()
@@ -176,7 +110,6 @@ def valid(args, model, eval_loader, wandb_step, global_step, epoch_step):
     eval_recall = recall(all_label, all_preds)
     eval_f1 = f1(all_label, all_preds)
     eval_roc_auc = roc_auc(all_label, all_preds_prob)
-    eval_ap = average_precision_score(all_label, all_preds_prob)
 
     logger.info("\n")
     logger.info("Validation Results")
@@ -191,7 +124,6 @@ def valid(args, model, eval_loader, wandb_step, global_step, epoch_step):
         'validation/recall': eval_recall,
         'validation/f1': eval_f1,
         'validation/roc_auc': eval_roc_auc,
-        'validation/AP': eval_ap,
         'global_step': global_step,
         'epoch_step': epoch_step}, step=wandb.run.step+wandb_step+1)
 
@@ -200,24 +132,12 @@ def valid(args, model, eval_loader, wandb_step, global_step, epoch_step):
 def train(args, model):
     """ Train the model """
     # Prepare dataset
-    if args.target=='mdrd':
-        train_loader,_ = get_loader_kidney_mdrd_disc(args, curriculum=[args.curriculum[0], args.curriculum[1]])
-        _, eval_loader = get_loader_kidney_mdrd_disc(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
-    elif args.target=='patient':    
+    if args.target=='patient':    
         train_loader,_ = get_loader_kidney_patient_disc(args, curriculum_step=args.curriculum[0])
         _, eval_loader = get_loader_kidney_patient_disc(args, curriculum_step=args.curriculum[-1])
-    elif args.target=='age_donor':
-        train_loader,_  = get_loader_kidney_age_donor_disc(args, curriculum=[args.curriculum[0], args.curriculum[1]])
-        _, eval_loader = get_loader_kidney_age_donor_disc(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
-    elif args.target=='fibrose':
-        train_loader,_  = get_loader_kidney_fibrose_disc(args, curriculum=[args.curriculum[0], args.curriculum[1]])
-        _, eval_loader = get_loader_kidney_fibrose_disc(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
-    elif args.target=='incomp_gref':
-        train_loader,_  = get_loader_kidney_incomp_disc(args, curriculum=[args.curriculum[0], args.curriculum[1]])
-        _, eval_loader = get_loader_kidney_incomp_disc(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
-    elif args.target=='cold_ischem_time':
-        train_loader,_  = get_loader_kidney_citime_disc(args, curriculum=[args.curriculum[0], args.curriculum[1]])
-        _, eval_loader = get_loader_kidney_citime_disc(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
+    else:
+        train_loader,_  = get_loader_kidney_pairs(args, curriculum=[args.curriculum[0], args.curriculum[1]])
+        _, eval_loader = get_loader_kidney_pairs(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
  
     # Prepare optimizer and scheduler
     optimizer = torch.optim.SGD(model.parameters(),
@@ -247,41 +167,21 @@ def train(args, model):
     curriculum_it = 0
     if args.resume:
         model, optimizer, scheduler, wandb_step, global_step, epoch_step, best_loss, curriculum_it = load_ckp(args, model, optimizer, scheduler)
-        if args.target=='mdrd':
-            train_loader,_ = get_loader_kidney_mdrd_disc(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
-            _, eval_loader = get_loader_kidney_mdrd_disc(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
-        elif args.target=='patient':
+        if args.target=='patient':
             train_loader,_ = get_loader_kidney_patient_disc(args, curriculum_step=args.curriculum[curriculum_it])
             _, eval_loader = get_loader_kidney_patient_disc(args, curriculum_step=args.curriculum[-1])
-        elif args.target=='age_donor':
-            train_loader,_ = get_loader_kidney_age_donor_disc(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
-            _, eval_loader = get_loader_kidney_age_donor_disc(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
-        elif args.target=='fibrose':
-            train_loader,_ = get_loader_kidney_fibrose_disc(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
-            _, eval_loader = get_loader_kidney_fibrose_disc(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
-        elif args.target=='incomp_gref':
-            train_loader,_ = get_loader_kidney_incomp_disc(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
-            _, eval_loader = get_loader_kidney_incomp_disc(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
-        elif args.target=='cold_ischem_time':
-            train_loader,_ = get_loader_kidney_citime_disc(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
-            _, eval_loader = get_loader_kidney_citime_disc(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
+        else:
+            train_loader,_ = get_loader_kidney_pairs(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
+            _, eval_loader = get_loader_kidney_pairs(args, curriculum=[args.curriculum[-2], args.curriculum[-1]])
     while True:
         t = time.time()
         epoch_step += 1
         if epoch_step > args.num_epochs[curriculum_it]:
             curriculum_it += 1
-            if args.target=='mdrd':
-                train_loader,_ = get_loader_kidney_mdrd_disc(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
-            elif args.target=='patient':
+            if args.target=='patient':
                 train_loader,_ = get_loader_kidney_patient_disc(args, curriculum_step=args.curriculum[curriculum_it])
-            elif args.target=='age_donor':
-                train_loader,_ = get_loader_kidney_age_donor_disc(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
-            elif args.target=='fibrose':
-                train_loader,_ = get_loader_kidney_fibrose_disc(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
-            elif args.target=='incomp_gref':
-                train_loader,_ = get_loader_kidney_incomp_disc(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
-            elif args.target=='cold_ischem_time':
-                train_loader,_ = get_loader_kidney_citime_disc(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
+            else:
+                train_loader,_ = get_loader_kidney_pairs(args, curriculum=[args.curriculum[2*curriculum_it], args.curriculum[2*curriculum_it+1]])
         model.train()
         epoch_iterator = tqdm(train_loader,
                               desc="Training (X / X Steps) (loss=X.X)",
@@ -358,11 +258,11 @@ def train(args, model):
 def main():
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("--target", choices= ['mdrd', 'patient', 'age_donor', 'fibrose', 'incomp_gref', 'cold_ischem_time'], type=str,
+    parser.add_argument("--target", choices= ['patient', 'GFR', 'age_donor', 'trans_incomp'], type=str,
                         help="Which upstream task.")
-    parser.add_argument("--dataset_size", default=1000, type=int,
+    parser.add_argument("--dataset_size", default=10500, type=int,
                         help="Size of the data set")
-    parser.add_argument("--testset_size", default=100, type=int,
+    parser.add_argument("--valset_size", default=500, type=int,
                         help="Size of the validation set")
     parser.add_argument("--features_head", choices=["mlp", "linear"], default="mlp",
                         help="Output features head model")
@@ -370,27 +270,27 @@ def main():
                         help="Output features space dimension")    
     parser.add_argument('--architecture', metavar='ARCH', default='resnet18', type=str,
                         help='Architecture of the model')
-    parser.add_argument("--exams", default=['J15', 'J30', 'M3', 'M12'], nargs='+', type=str,
+    parser.add_argument("--exams", default=['D15', 'D30', 'M3', 'M12'], nargs='+', type=str,
                         help="Follow-ups exams to use")
 
-    parser.add_argument("--output_dir", default="/pretrained_models", type=str,
+    parser.add_argument("--output_dir", default="./pretrained_models", type=str,
                         help="The output directory where checkpoints will be written.")
 
     parser.add_argument("--img_size", nargs='+', type=int,
-                        help="Resolution size")
+                        help="Volumes size")
     parser.add_argument("--batch_size", default=24, type=int,
                         help="Total batch size for training.")
     parser.add_argument("--eval_every", default=1, type=int,
                         help="Run prediction on validation set every so many epochs.")
 
-    parser.add_argument("--loss_margin", default=0, type=float,
+    parser.add_argument("--loss_margin", default=0.5, type=float,
                         help="Margin for cosine embedding loss") 
-    parser.add_argument("--learning_rate", default=3e-2, type=float,
+    parser.add_argument("--learning_rate", default=1e-2, type=float,
                         help="The initial learning rate for SGD.")
     parser.add_argument("--weight_decay", default=0, type=float,
                         help="Weight deay if we apply some.")
     parser.add_argument("--num_epochs", default=[100], type=int, nargs='+',
-                        help="Total number of training epochs to perform.")
+                        help="Total number of training epochs to perform with curriculum steps.")
     parser.add_argument("--decay_type", choices=["cosine", "linear"], default="cosine",
                         help="How to decay the learning rate.")
     parser.add_argument("--warmup_epochs", default=5, type=int,
@@ -398,14 +298,14 @@ def main():
     parser.add_argument("--max_grad_norm", default=1.0, type=float,
                         help="Max gradient norm.")
 
-    parser.add_argument('--augmentation', default=0, type=int,
+    parser.add_argument('--augmentation', default=2, type=int,
                     help='Data augmentation transforms')
-    parser.add_argument('--dropout', default=0., type=float,
+    parser.add_argument('--dropout', default=0.1, type=float,
                     help='head dropout')    
     parser.add_argument('--normalize_feat', default=1, type=int,
                     help='Normalize features vectors')
     parser.add_argument("--curriculum", default=[0], nargs='+', type=int,
-                        help="Curriculum training steps")
+                        help="Curriculum training steps or thresholds")
 
     parser.add_argument('--seed', type=int, default=42,
                         help="Random seed for initialization")

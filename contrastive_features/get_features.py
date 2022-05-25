@@ -1,46 +1,34 @@
-import sys
+# Adapted from github.com/jeonsworld/ViT-pytorch/blob/main/train.py
+
 import logging
 import argparse
 import os
 import random
 import numpy as np
 import matplotlib.pyplot as plt
-import subprocess
-from io import BytesIO
+import time
 import pandas as pd
-import wandb
 from collections import OrderedDict
+
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
 import torch.distributed as dist
 
-from tqdm import tqdm
-
+import sys
+sys.path.insert(0, '../')
 from models.resnet_imagenet_2d import resnet18_2d_imagenet, resnet50_2d_imagenet
 from models.resnet_imagenet_3d import resnet18_3d_imagenet, resnet50_3d_imagenet
 from models.resnet_medicalnet import medicalnet_resnet18
 from models.resnet import resnet10, resnet18, resnet34, resnet50
-
+from dataloader import get_loader_kidney_patient_disc, get_loader_kidney_pairs
 from utils.scheduler import WarmupLinearSchedule, WarmupCosineSchedule
-from dataloader import get_loader_kidney
-
-from torch.nn.modules.utils import _pair, _triple
-
+from utils.metrics import AverageMeter, f1, recall, precision, roc_auc
+from utils.checkpoints import save_ckp, load_ckp
+from utils.misc import count_parameters, set_seed
 
 logger = logging.getLogger(__name__)
-
-
-def get_free_gpu():
-        gpu_stats = subprocess.check_output(["nvidia-smi", "--format=csv", "--query-gpu=memory.used,memory.free"])
-        gpu_df = pd.read_csv(BytesIO(gpu_stats),
-                        names=['memory.used', 'memory.free'],
-                        skiprows=1)
-        print('GPU usage:\n{}'.format(gpu_df))
-        gpu_df['memory.free'] = gpu_df['memory.free'].map(lambda x: float(x.rstrip(' [MiB]')))
-        idx = gpu_df['memory.free'].idxmax()
-        print('Using GPU{} with {} free MiB'.format(idx, gpu_df.iloc[idx]['memory.free']))
-        return idx
 
 class Identity(nn.Module):
     def __init__(self):
@@ -50,7 +38,7 @@ class Identity(nn.Module):
 
 def setup(args):
     # Prepare model
-    num_classes = 2 #10 if args.dataset == "cifar10" else 100
+    num_classes = 2 
     if args.architecture[:6]=='resnet':
         print('RESNET')
         if args.architecture=='resnet18':
@@ -151,18 +139,6 @@ def setup(args):
     return args, model
 
 
-def count_parameters(model):
-    params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    return params/1000000
-
-
-def set_seed(args):
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
-
 def train(args, model):
     """ Train the model """
     normalize_mean = [0.485, 0.456, 0.406]
@@ -242,7 +218,7 @@ def main():
     parser.add_argument("--batch_size", default=1, type=int,
                         help="Total batch size for training.")
 
-    parser.add_argument("--num_epochs", default=200, type=int,
+    parser.add_argument("--num_epochs", default=1, type=int,
                         help="Total number of training epochs to perform.")
     parser.add_argument('--augmentation', default=0, type=int,
                     help='data augmentation transforms')
@@ -252,18 +228,13 @@ def main():
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
 
-    parser.add_argument('--wandb_id', type=str,
-                    help='wandb run id') 
-    parser.add_argument('--description', type=str,
-                        help="short run description (wandb name)")
-    args = parser.parse_args()
-
-    args.name = args.wandb_id
     # Setup CUDA, GPU & distributed training
-    print('Using GPU')
-    device = "cuda"
-    args.n_gpu = torch.cuda.device_count()
-    args.device = device
+    if torch.cuda.is_available():
+        device = "cuda"
+        args.n_gpu = torch.cuda.device_count()
+        args.device = device
+    else:
+        device = "cpu"
 
     # Setup logging
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
