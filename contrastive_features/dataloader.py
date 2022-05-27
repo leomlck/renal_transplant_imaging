@@ -42,8 +42,8 @@ def get_loader_kidney_pairs(args, curriculum):
 	Building dataset and dataloader for the weakly-supervised contrastive learning setup (using clinical variable information).
 	"""
 	data_settings = {
-		'path_to_data': '../../data/dummy_mri_dataset',
-		'path_to_targets': '../../data/dummy_dataframes',
+		'path_to_data': '../data/dummy_mri_dataset',
+		'path_to_targets': '../data/dummy_dataframes',
 		'key_words_seqs': [['TUB', 'tub', 'WATER', 'AX', 'LAVA', ], ['WATER', 'AX', 'LAVA']],
 		'mins_key_words': [4, 3],
 		'exams': args.exams,
@@ -176,7 +176,7 @@ def get_loader_kidney_patient_disc(args, curriculum_step=0):
 	Building dataset and dataloader for the self-supervised contrastive learning setup (patient level).
 	"""
 	data_settings = {
-		'path_to_data': '../../data/dummy_mri_dataset',
+		'path_to_data': '../data/dummy_mri_dataset',
 		'key_words_seqs': [['TUB', 'tub', 'WATER', 'AX', 'LAVA', ], ['WATER', 'AX', 'LAVA']],
 		'mins_key_words': [4, 3],
 		'exams': args.exams,
@@ -300,8 +300,8 @@ def get_loader_kidney(args, get_features=False):
 	Building dataset and dataloader to get features or for downstream tasks.
 	"""
 	data_settings = {
-		'path_to_data': '../../data/dummy_mri_dataset',
-		'path_to_targets': '../../data/dummy_dataframes',
+		'path_to_data': '../data/dummy_mri_dataset',
+		'path_to_targets': '../data/dummy_dataframes',
         	'key_words_seqs': [['TUB', 'tub', 'WATER', 'AX', 'LAVA', ]],
 		'mins_key_words': [4],
 		'exams': args.exams,
