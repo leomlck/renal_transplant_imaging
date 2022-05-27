@@ -17,6 +17,9 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+def acc(y_true, y_pred):
+    return accuracy_score(y_true, y_pred)
+
 def f1(y_true, y_pred):
     return f1_score(y_true, y_pred, zero_division=0)
 

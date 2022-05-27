@@ -5,6 +5,7 @@ contrastive_features/wandb
 
 # logs output folder from slurm job
 contrastive_features/output
+contrastive_features/features
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

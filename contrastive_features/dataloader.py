@@ -50,7 +50,7 @@ def get_loader_kidney_pairs(args, curriculum):
 		'mri_filename': 'dummy_mri.nii.gz',
 		}
 
-	df_targets = pd.read_csv(os.path.join(data_settings['path_to_targets'], 'df_targets.csv'), sep=';')
+	df_targets = pd.read_csv(os.path.join(data_settings['path_to_targets'], 'df_targets.csv'))
 	if args.target == 'GFR':
 		df_targets = df_targets[['patient']+[args.target+' {}'.format(exam) for exam in args.exams]]
 	else:
@@ -192,9 +192,8 @@ def get_loader_kidney_patient_disc(args, curriculum_step=0):
 				path_to_volumes = get_patient_seq_paths(data_settings['path_to_data'], exam, data_settings['key_words_seqs'], data_settings['mins_key_words'], select_patient=patient, dummy=True)
 				if path_to_volumes:
 					for key in path_to_volumes.keys():
-						if os.path.exists(os.path.join(path_to_volumes[key], 'preprocessed')):
-							sample_id = patient + '_' + exam + '_' + key
-							dataset.append(sample_id)
+						sample_id = patient + '_' + exam + '_' + key
+						dataset.append(sample_id)
 	# Build a dataset of pairs, set label y of the pair according to the patient / exam ids
 	X, y = [], []
 	dataset2 = dataset.copy()
@@ -295,35 +294,18 @@ def get_loader_kidney_patient_disc(args, curriculum_step=0):
 	return train_loader, validation_loader
 
 
-def get_loader_kidney(args, get_features=False):
+def get_loader_kidney(args):
 	"""
-	Building dataset and dataloader to get features or for downstream tasks.
+	Building dataset and dataloader to get features.
 	"""
 	data_settings = {
 		'path_to_data': '../data/dummy_mri_dataset',
 		'path_to_targets': '../data/dummy_dataframes',
         	'key_words_seqs': [['TUB', 'tub', 'WATER', 'AX', 'LAVA', ]],
 		'mins_key_words': [4],
-		'exams': args.exams,
+		'exams': [args.exams],
 		'mri_filename': 'dummy_mri.nii.gz',
 		}
-
-	test_ids = {'dfg_threshold_45': ['001-0002-B-B'],
- 'age_donneur': [],
- 'incomp_gref': [],
- 'nb_gref_prec': [],
- 'dur_ischem_froide_m': [],
- 'Failure transplantation': []} 
-	test_ids = test_ids[args.target]
-	test_ids = [patient+'_{}'.format(args.exams) for patient in test_ids]
-        # Import target df
-	target = args.target
-	df_targets = pd.read_csv(os.path.join(data_settings['path_to_targets'], 'df_targets.csv'), sep=';')
-	df_targets.dropna(axis=0, how='any', subset=[target])
-	data_settings['exams'] = [args.exams]
-	df_targets['patient'] = df_targets['patient']+'_'+args.exams
-	labels = pd.Series((df_targets[target].values>args.target_threshold).astype(int),index=df_targets['patient']).to_dict()
-	data_settings['labels'] = labels
 
 	select_patients = []
 	patients = next(os.walk(os.path.join(data_settings['path_to_data'])))[1]
@@ -334,23 +316,8 @@ def get_loader_kidney(args, get_features=False):
 				if path_to_volumes:
 					if len(list(path_to_volumes.keys()))==1:
 						path_key = list(path_to_volumes.keys())[0]
-						if os.path.exists(os.path.join(path_to_volumes[path_key], 'preprocessed')):
-							patient_id = patient + '_' + exam
-							select_patients.append(patient_id)
-	select_patients = (set(data_settings['labels'].keys()) & set(select_patients))
-	if not get_features:
-        	select_patients = select_patients - set(test_ids)
-	select_patients = list(select_patients)
-	y = [data_settings['labels'][x] for x in select_patients]
-	train_ids, eval_ids,_,_ = train_test_split(select_patients, y, test_size=args.evalset_size)
-
-	# Verify that patient in test are not in train (other follow-up)
-	patients_in_eval = np.unique([patient_id.split('_')[0] for patient_id in eval_ids])
-	for train_id in train_ids:
-		if train_id.split('_')[0] in patients_in_eval:
-			train_ids.remove(train_id)
-			test_ids.append(train_id)
-
+						patient_id = patient + '_' + exam
+						select_patients.append(patient_id)
 	if args.augmentation==1:
 		train_transform = tio.Compose([tio.RandomFlip(), 
 					       tio.RandomAffine(p=0.5)])
@@ -365,45 +332,19 @@ def get_loader_kidney(args, get_features=False):
 		train_transform = tio.Compose([])
 		eval_transform = tio.Compose([])
         
-	if get_features:
-		train_ids = select_patients
-		eval_ids = []
-		test_ids = []
+	train_ids = select_patients
 	train_subjects = []
 	for patient in train_ids:
 		ID_patient = patient.split('_')[0]
 		ID_exam = patient.split('_')[1]
 		path_to_volumes = get_patient_seq_paths(data_settings['path_to_data'], ID_exam, data_settings['key_words_seqs'], data_settings['mins_key_words'], select_patient=ID_patient, dummy=True)
-		image_path = os.path.join(path_to_volumes[path_key], 'preprocessed/mri_cropped_normalized_resized_vit.nii.gz')
-		subject = tio.Subject(mri=tio.ScalarImage(image_path), label=data_settings['labels'][patient], patient_id=ID_patient) 
+		image_path = os.path.join(path_to_volumes[path_key], data_settings['mri_filename'])
+		subject = tio.Subject(mri=tio.ScalarImage(image_path), patient_id=ID_patient) 
 		train_subjects.append(subject)
 	train_dataset = tio.SubjectsDataset(train_subjects, transform=train_transform)
 
-	eval_subjects = []
-	for patient in eval_ids:
-		ID_patient = patient.split('_')[0]
-		ID_exam = patient.split('_')[1]
-		path_to_volumes = get_patient_seq_paths(data_settings['path_to_data'], ID_exam, data_settings['key_words_seqs'], data_settings['mins_key_words'], select_patient=ID_patient, dummy=True)
-		image_path = os.path.join(path_to_volumes[path_key], 'preprocessed/mri_cropped_normalized_resized_vit.nii.gz')
-		subject = tio.Subject(mri=tio.ScalarImage(image_path), label=data_settings['labels'][patient], patient_id=patient)
-		eval_subjects.append(subject)
-	eval_dataset = [] if get_features else tio.SubjectsDataset(eval_subjects, transform=eval_transform)
-
-
-	test_subjects = []
-	for patient in test_ids:
-		ID_patient = patient.split('_')[0]
-		ID_exam = patient.split('_')[1]
-		path_to_volumes = get_patient_seq_paths(data_settings['path_to_data'], ID_exam, data_settings['key_words_seqs'], data_settings['mins_key_words'], select_patient=ID_patient, dummy=True)
-		image_path = os.path.join(path_to_volumes[path_key], 'preprocessed/mri_cropped_normalized_resized_vit.nii.gz')
-		subject = tio.Subject(mri=tio.ScalarImage(image_path), label=data_settings['labels'][patient], patient_id=patient)
-		test_subjects.append(subject)
-	test_dataset = [] if get_features else tio.SubjectsDataset(test_subjects, transform=eval_transform)
-
 	train_loader = DataLoader(train_dataset, batch_size=args.batch_size)
-	eval_loader = DataLoader(eval_dataset, batch_size=args.batch_size)
-	test_loader = DataLoader(test_dataset, batch_size=args.batch_size)
 
-	return train_loader, eval_loader, test_loader
+	return train_loader
 
 

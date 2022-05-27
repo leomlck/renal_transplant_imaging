@@ -22,7 +22,7 @@ sys.path.insert(0, '../')
 from models.resnet import resnet10, resnet18, resnet34, resnet50
 from dataloader import get_loader_kidney_patient_disc, get_loader_kidney_pairs
 from utils.scheduler import WarmupLinearSchedule, WarmupCosineSchedule
-from utils.metrics import AverageMeter, f1, recall, precision, roc_auc
+from utils.metrics import AverageMeter, acc, f1, recall, precision, roc_auc
 from utils.checkpoints import save_ckp, load_ckp
 from utils.misc import count_parameters, set_seed
 
@@ -105,7 +105,7 @@ def valid(args, model, eval_loader, wandb_step, global_step, epoch_step):
         epoch_iterator.set_description("Validating... (loss=%2.5f)" % eval_losses.val)
  
     all_preds, all_preds_prob, all_label = all_preds[0], all_preds_prob[0], all_label[0]
-    eval_accuracy = accuracy_score(all_label, all_preds)
+    eval_accuracy = acc(all_label, all_preds)
     eval_precision = precision(all_label, all_preds)
     eval_recall = recall(all_label, all_preds)
     eval_f1 = f1(all_label, all_preds)

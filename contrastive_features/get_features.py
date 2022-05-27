@@ -22,10 +22,7 @@ from models.resnet_imagenet_2d import resnet18_2d_imagenet, resnet50_2d_imagenet
 from models.resnet_imagenet_3d import resnet18_3d_imagenet, resnet50_3d_imagenet
 from models.resnet_medicalnet import medicalnet_resnet18
 from models.resnet import resnet10, resnet18, resnet34, resnet50
-from dataloader import get_loader_kidney_patient_disc, get_loader_kidney_pairs
-from utils.scheduler import WarmupLinearSchedule, WarmupCosineSchedule
-from utils.metrics import AverageMeter, f1, recall, precision, roc_auc
-from utils.checkpoints import save_ckp, load_ckp
+from dataloader import get_loader_kidney
 from utils.misc import count_parameters, set_seed
 
 logger = logging.getLogger(__name__)
@@ -40,7 +37,7 @@ def setup(args):
     # Prepare model
     num_classes = 2 
     if args.architecture[:6]=='resnet':
-        print('RESNET')
+        logger.info('RESNET')
         if args.architecture=='resnet18':
             dim_in = 512
             model = resnet18(in_channels=1, sample_size=args.img_size, num_classes=num_classes)
@@ -52,26 +49,19 @@ def setup(args):
         elif args.features_head == 'mlp':
             model.fc = nn.Sequential(nn.Linear(dim_in, dim_in), nn.Dropout(args.dropout), nn.ReLU(inplace=True), nn.Linear(dim_in, args.feat_dim), nn.Dropout(args.dropout))
         if args.pretrained_features_dir is not None:
-            print('Using pretrained features model')
             checkpoint = torch.load(args.pretrained_features_dir)
             model.load_state_dict(checkpoint['state_dict'])
         model.fc = Identity()
     elif args.architecture.split('_')[0]=='kinetics':
-        print('KINETICCS RESNET')
+        logger.info('KINETICCS RESNET')
         dim_in = 512 
         model = generate_model(model_depth=18, n_classes=700)
         if args.pretrained_features_dir is not None:
-            print('Using pretrained features model')
             checkpoint = torch.load(args.pretrained_features_dir)
-            '''
-            new_cp
-            for l in checkpoint['state_dict'].keys()
-            ''' 
             model.load_state_dict(checkpoint['state_dict'])
         model.fc = Identity()
-        #model = nn.Sequential(nn.Conv3d(1,3,1), model)
     elif args.architecture.split('_')[0]=='medicalnet':
-        print('MEDICALNET RESNET')
+        logger.info('MEDICALNET RESNET')
         model = medicalnet_resnet18(sample_input_D=14,
                  sample_input_H=28,
                  sample_input_W=28,
@@ -79,17 +69,14 @@ def setup(args):
                  shortcut_type='A').to(args.device)
         model.conv_seg = Identity()
         if args.pretrained_features_dir is not None:
-            print('Using pretrained features model')
             checkpoint = torch.load(args.pretrained_features_dir)
-            #print('model statedict', model.state_dict().keys())
             new_cp = {}
             for l in checkpoint['state_dict'].keys():
                 new_cp[l[7:]] = checkpoint['state_dict'][l]
-            #print('new checkpoint statedict', new_cp.keys())
             model.load_state_dict(new_cp)
             model.conv_seg = nn.AvgPool3d([12, 18, 24], stride=1)
     elif args.architecture.split('_')[0]=='imagenet':
-        print('IMAGENET RESNET')
+        logger.info('IMAGENET RESNET')
         normalize_mean = np.array([0.485, 0.456, 0.406])
         normalize_std = np.array([0.229, 0.224, 0.225])
         dim_in = 512
@@ -122,14 +109,7 @@ def setup(args):
             channel_embedding = nn.Conv3d(1,3,1, bias=True)
             model = nn.Sequential(OrderedDict([('channel_embedding', channel_embedding), ('model', model)]))
             checkpoint = torch.load(args.pretrained_features_dir)
-            print(checkpoint['state_dict'].keys())
             model.load_state_dict(checkpoint['state_dict']) 
-            if not args.fine_tune:
-                logger.info("NO fine tuning of the pretrained model")
-                for param in model.parameters():
-                    param.requires_grad = False
-            else:
-                logger.info("Training all the parameters of the model")
             model.model.fc = Identity()
     if torch.cuda.device_count() > 1:
         model = torch.nn.DataParallel(model) 
@@ -144,7 +124,7 @@ def train(args, model):
     normalize_mean = [0.485, 0.456, 0.406]
     normalize_std = [0.229, 0.224, 0.225]
     # Prepare dataset
-    train_loader, eval_loader, test_loader = get_loader_kidney(args, get_features=True)
+    train_loader = get_loader_kidney(args)
 
     args.num_steps = args.num_epochs * len(train_loader)
     t_total = args.num_steps
@@ -152,8 +132,6 @@ def train(args, model):
     # Train!
     logger.info("***** Running training *****")
     logger.info("  Total epochs = %d", args.num_epochs)    
-    logger.info("  Total optimization steps = %d", args.num_steps)
-    logger.info("  Instantaneous batch size per GPU = %d", args.batch_size)
     model.zero_grad()
     set_seed(args)  
     global_step, epoch_step = 0, 0
@@ -188,17 +166,13 @@ def train(args, model):
     df_feats = pd.DataFrame(features)
     df_patients = pd.DataFrame(list_patients, columns=['patient'])
     df = pd.concat([df_patients, df_feats], axis=1)
-    df.to_csv('/gpfs/workdir/mileckil/output/save_features_cnn/features_{}.csv'.format(args.description))
+    df.to_csv('./features/features_{}.csv'.format(args.description))
     logger.info("End Training!")
 
 
 def main():
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("--target", type=str,
-                        help="Which downstream task.")
-    parser.add_argument("--target_threshold", default=0, type=int,
-                        help="Threshold to binarize target")    
     parser.add_argument("--exams", default=None, type=str,
                         help="Follow-up exam")
     parser.add_argument('--architecture', default='resnet10', type=str,
@@ -209,9 +183,9 @@ def main():
                     help='hidden space mlp dimension')
 
     parser.add_argument("--pretrained_dir", type=str, default=None,
-                        help="Where to search for pretrained ViT models.")
+                        help="Where to search for pretrained models.")
     parser.add_argument("--pretrained_features_dir", type=str, default=None,
-                        help="Where to search for pretrained features ViT models.")
+                        help="Where to search for pretrained features models.")
 
     parser.add_argument("--img_size", default=[224], nargs='+', type=int,
                         help="Resolution size")
@@ -227,7 +201,10 @@ def main():
 
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
-
+    parser.add_argument('--description', type=str,
+                        help="Short run description (save features filename)")  
+    args = parser.parse_args()
+ 
     # Setup CUDA, GPU & distributed training
     if torch.cuda.is_available():
         device = "cuda"
