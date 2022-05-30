@@ -58,7 +58,7 @@ conda env create -n ENVNAME --file conda_environment.yml
 </p>
 
 ### Visualization of features
-Generated features from our DCE MRI data visualization using PCA decomposition. Their association with sCreat (&mu;.mol.L<sup>-1</sup>) is depicted, a renal biomarker.
+Generated features from our DCE MRI data visualization using PCA decomposition. Their association with serum creatinine (sCreat, &mu;.mol.L<sup>-1</sup>) is depicted, a renal biomarker.
 <p align="center">
   <img src="figures/visualization.png" width="900">
 </p>
