@@ -1,3 +1,5 @@
+# Python script to launch a slurm job, watching if the job is running correctly and resuming it if training if longer than max time per job
+
 import os
 import io
 import pandas as pd
@@ -5,7 +7,7 @@ import time
 import wandb
 
 architecture = 'resnet18'
-target = 'age_donor'
+target = 'GFR'
 job_description = '{}_{}_contrastive_cosloss'.format(architecture, target) 
 
 wandb_job_id = wandb.util.generate_id() 
@@ -13,11 +15,11 @@ job_name = 'loop_job_{}.sh'.format(job_description)
 start_script = ('#!/bin/bash\n' +
                 '#SBATCH --job-name=main_train_features\n' +
                 '#SBATCH --output=output/%x.o%j\n' +
-                '#SBATCH --time=24:00:00\n' +
+                '#SBATCH --time=01:00:00\n' +
                 '#SBATCH --ntasks=1\n' +
                 '#SBATCH --cpus-per-task=4\n'
                 '#SBATCH --mem=12GB\n' +
-                '#SBATCH --gres=gpu:4\n' +
+                '#SBATCH --gres=gpu:1\n' +
                 '#SBATCH --partition=gpu\n' +
                 '#SBATCH --export=NONE\n' +
                 '\n' +
@@ -26,7 +28,7 @@ start_script = ('#!/bin/bash\n' +
                 'source activate pyenv\n')
 
 # from scratch python training
-command = 'python main_train_features.py --target {} --exams J15 J30 M3 M12 --dataset_size 10500 --testset_size 500 --architecture {} --img_size 96 144 192 --features_head mlp --feat_dim 256 --batch_size 30 --eval_every 1 --learning_rate 1e-2 --num_epochs 20 40 60 --warmup_epochs 5 --normalize_feat 1 --augmentation 2 --dropout 0.1 --curriculum 5 30 10 20 10 15 --loss_margin 0.5 --description {} --wandb_id {}'.format(target, architecture, job_description, wandb_job_id)
+command = 'python main_train_features.py --target {} --exams D15 D30 M3 M12 --dataset_size 50 --valset_size 10 --architecture {} --img_size 96 144 192 --features_head mlp --feat_dim 256 --batch_size 12 --eval_every 1 --learning_rate 1e-2 --num_epochs 2 4 6 --warmup_epochs 1 --normalize_feat 1 --augmentation 2 --dropout 0.1 --curriculum 5 30 10 20 10 15 --loss_margin 0.5 --description {} --wandb_id {}'.format(target, architecture, job_description, wandb_job_id)
 
 
 # send slurm job
