@@ -3,7 +3,7 @@
 ## Contrastive Learning of Renal Transplant MRIs
 
 <p align="center">
-  <img src="figures/overview.png" width="900">
+  <img src="figures/overview_contrastive.png" width="900">
 </p>
 
 ### Usage
