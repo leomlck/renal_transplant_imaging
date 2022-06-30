@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 
 import sys
 sys.path.insert(0, '../')
-from  utils.data_import import get_patient_seq_paths
+from  utils.misc import get_patient_seq_paths
 
 class CustomSampler(torch.utils.data.sampler.Sampler):
 	"""

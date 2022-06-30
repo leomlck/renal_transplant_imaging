@@ -1,5 +1,8 @@
 # Adapted from https://github.com/github/gitignore/blob/main/Python.gitignore
 
+# SOON TO COME
+masked_transformer
+
 # wandb folder 
 contrastive_features/wandb
 
