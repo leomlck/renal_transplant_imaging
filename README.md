@@ -70,6 +70,16 @@ Generated features from our DCE MRI data visualization using PCA decomposition. 
 </p>
 
 ### Usage
+Train your Masked Transformer Encoder model locally using the dummy dataset and dummy pretrained features. 
+```
+python main_train_masked_tsf.py --input img --target pred_M12 --pretraining dummy --model tsf --normalize 1 --batch_size 8 --n_heads 2 --n_layers 2 --ffwd_dim 768 --dropout 0.1 --lr 1e-3 --epochs 30 --warmup_epochs 5 --decay_type cosine --augmentation 0 --n_splits 2 --description some_description
+```
+
+Train your Masked Transformer Encoder model using a grid on hyperparameters sending a slurm job.  
+Edit the file to modify the slurm parameters, and/or the hyperparameters in ```launch_grid_search.py```, and/or the ```main_train_masked_tsf.py``` arguments.
+```
+python slurm_train_masked_tsf.py
+```
 
 ## References
 ```
