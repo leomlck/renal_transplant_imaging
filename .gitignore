@@ -1,13 +1,13 @@
 # Adapted from https://github.com/github/gitignore/blob/main/Python.gitignore
 
-# SOON TO COME
-masked_transformer
+# save folder 
+save/
 
 # wandb folder 
-contrastive_features/wandb
+wandb/
 
 # logs output folder from slurm job
-contrastive_features/output
+output/
 contrastive_features/features
 
 # Byte-compiled / optimized / DLL files
