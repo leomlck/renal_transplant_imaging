@@ -63,7 +63,15 @@ Generated features from our DCE MRI data visualization using PCA decomposition. 
   <img src="figures/visualization.png" width="900">
 </p>
 
-### Reference
+## Renal transplant function prediction with masked transformers
+
+<p align="center">
+  <img src="figures/overview_masked_tsf.png" width="900">
+</p>
+
+### Usage
+
+## References
 ```
 @inproceedings{milecki2022constrative,
   title={Constrative Learning for Kidney Transplant Analysis using {MRI} data and Deep Convolutional Networks},
