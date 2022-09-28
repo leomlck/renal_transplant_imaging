@@ -83,11 +83,20 @@ Generated features from our DCE MRI data visualization using PCA decomposition. 
 
 ## References
 ```
+@inproceedings{milecki22transformers,
+  TITLE = {{Contrastive Masked Transformers for Forecasting Renal Transplant Function}},
+  AUTHOR = {Milecki, Leo and Kalogeiton, Vicky and Bodard, Sylvain and Anglicheau, Dany and Correas, Jean-Michel and Timsit, Marc-Olivier and Vakalopoulou, Maria},
+  BOOKTITLE = {{MICCAI 2022 - 25th International Confernce on Medical Image Computing and Computer Assisted Intervention}},
+  ADDRESS = {Singapore, Singapore},
+  YEAR = {2022},
+  MONTH = Sep,
+}
+
 @inproceedings{milecki2022constrative,
-  title={Constrative Learning for Kidney Transplant Analysis using {MRI} data and Deep Convolutional Networks},
-  author={Leo Milecki and Vicky Kalogeiton and Sylvain Bodard and Dany Anglicheau and Jean-Michel Correas and Marc-Olivier Timsit and Maria Vakalopoulou},
-  booktitle={Medical Imaging with Deep Learning},
-  year={2022},
-  url={https://openreview.net/forum?id=fLUyt7-mWwI}
+  TITLE={Constrative Learning for Kidney Transplant Analysis using {MRI} data and Deep Convolutional Networks},
+  AUTHOR={Leo Milecki and Vicky Kalogeiton and Sylvain Bodard and Dany Anglicheau and Jean-Michel Correas and Marc-Olivier Timsit and Maria Vakalopoulou},
+  BOOKTITLE={Medical Imaging with Deep Learning},
+  YEAR={2022},
+  URL={https://openreview.net/forum?id=fLUyt7-mWwI}
 }
 ```
