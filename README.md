@@ -10,7 +10,7 @@
 
 Pretrain your ResNet model locally using the dummy dataset with the self-supervised task based on patient level. 
 ```
-python main_train_features.py --target patient --exams D15 D30 M3 M12 --dataset_size 50 --valset_size 10 --architecture resnet18 --img_size 96 144 192 --features_head mlp --feat_dim 256 --batch_size 12 --eval_every 1 --learning_rate 1e-2 --num_epochs 2 4 --warmup_epochs 1 --normalize_feat 1 --augmentation 2 --dropout 0.1 --curriculum 0 1 --loos_margin 0.5 --description dummy_contrastive_cosloss --wandb_id dummy_test
+python main_train_features.py --target patient --exams D15 D30 M3 M12 --dataset_size 50 --valset_size 10 --architecture resnet18 --img_size 96 144 192 --features_head mlp --feat_dim 256 --batch_size 12 --eval_every 1 --learning_rate 1e-2 --num_epochs 2 4 --warmup_epochs 1 --normalize_feat 1 --augmentation 2 --dropout 0.1 --curriculum 0 1 --loss_margin 0.5 --description dummy_contrastive_cosloss --wandb_id dummy_test
 ```
 
 Pretrain your ResNet model sending a slurm job (modify ```dataloader.py``` to use your own dataset).  
